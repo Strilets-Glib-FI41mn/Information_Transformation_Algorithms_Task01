@@ -2,14 +2,17 @@
 mod alphabet;
 mod base64_classic;
 mod decoder;
+mod errors;
 
 use alphabet::Alphabet;
-use clap::Error;
+//use clap::Error;
 use clap::Parser;
 use serde::Serialize;
 use std::{fs::File, io::Write, path::PathBuf};
 use dialoguer::Confirm;
 use dialoguer::Editor;
+
+
 
 /*
 #[derive(
@@ -38,10 +41,8 @@ enum Mode{
 struct Cli {
     input_file: PathBuf,
     output_file: Option<String>,
-
     #[arg(long, short, default_value_t = Mode::Encode, value_enum)]
     mode: Mode,
-
     //#[arg(long, short, default_value_t = Encoding::BASE64, value_enum)]
     //encoding: Encoding,
     #[arg(long, action)]
@@ -102,7 +103,8 @@ fn encode_chunk<T: Alphabet>(alphabet: &T, chunk: &Vec<u8>, index: &mut u64) -> 
 
 fn main() {
     let cli = Cli::parse();
-    let mut path = PathBuf::from(&cli.input_file);
+    let path = PathBuf::from(&cli.input_file);
+    let mut output_path = path.clone();
     let classic_alphabet = base64_classic::Base64Classic;
     let comment_char = classic_alphabet.comment_char();
     let extension_comment_preffix = format!("{} extension: ", comment_char);
@@ -110,15 +112,15 @@ fn main() {
     match cli.mode{
         Mode::Encode => {
             match &cli.output_file{
-                Some(file_name) => path.set_file_name(file_name), //println!("{}", output),
+                Some(output_file_path) => output_path = output_file_path.into(), //println!("{}", output),
                 None => {
-                    path = format!("{}.base64", path.to_str().unwrap()).into()
+                    output_path = format!("{}.base64", path.to_str().unwrap()).into()
                 }
                 
             }
 
 
-            if path.exists(){
+            if output_path.exists(){
                 let confirmation = Confirm::new()
                 .with_prompt("File already exists. Do you want to replace it?")
                 .interact().unwrap();
@@ -131,10 +133,7 @@ fn main() {
             let bytes = std::fs::read(&cli.input_file).unwrap();
 
             let resulting = encode_base64(&bytes, &base64_classic::Base64Classic);
-            //println!("{}", resulting);
-
-
-            let mut file = File::create(path).unwrap();
+            let mut file = File::create(output_path).unwrap();
             file.write(resulting.as_bytes()).unwrap();
             if cli.extension_comment && let Some(ext) = cli.input_file.extension() 
             && let Ok(ext_v) = ext.to_os_string().into_string() {
@@ -167,43 +166,46 @@ fn main() {
             }
             
             let file_string = std::fs::read_to_string(&cli.input_file).unwrap();
-            let (decoded, comments) = crate::decoder::decode_using_alphabet(base64_classic::Base64Classic, &file_string)
+            let (decoded, comments, errors) = crate::decoder::decode_using_alphabet(base64_classic::Base64Classic, &file_string)
                 .expect("Failed");
-
+            for error in &errors{
+                println!("{}", error);
+            }
             match &cli.output_file{
-                Some(file_name) =>{
-                    path.set_file_name(file_name);
+                Some(output_file_path) =>{
+                    output_path = output_file_path.into();
                 },
                 None => {
+                    let mut ext = None;
                     for comment in &comments {
                         if comment.contains(&name_comment_preffix) && let Some(file_name) = comment.split(&name_comment_preffix).nth(1){
-                            println!("file_name!!!");
-                            path.set_file_name(file_name);
+                            output_path = file_name.into();
                         }
                         if comment.contains(&extension_comment_preffix) && let Some(extension) 
-                            = comment.split(&extension_comment_preffix).nth(1){
-                                println!("EXT!!!");
-                                path.set_extension(extension);
+                        = comment.split(&extension_comment_preffix).nth(1){
+                                ext = Some(extension);
                         }
                     }
-
-                    let new_path = (path.file_stem().unwrap_or(path.as_os_str())).to_os_string().into_string().unwrap();
+                    if let Some(ext) = ext{
+                        output_path.set_extension(ext);
+                    }
+                    let output_path_str = output_path.as_os_str().to_os_string().into_string().unwrap();
                     
                     let confirmation = Confirm::new()
-                        .with_prompt(format!("Should the name of new file be {}", &new_path))
+                        .with_prompt(format!("Should the name of new file be {}", &output_path_str))
                         .interact()
                         .unwrap();
 
                     if confirmation {
-                        path = new_path.into();
+                        output_path = output_path_str.into();
                         println!("Looks like you want to continue");
                     } else {
                         println!("Change it then");
 
-                        if let Some(rv) = Editor::new().edit(&format!("{}", &new_path) ).unwrap() {
+                        if let Some(rv) = Editor::new().edit(&format!("{}", &output_path_str) ).unwrap() {
                             println!("The file will become:");
                             println!("{}", rv);
-                            path = rv.into();
+                            output_path = rv.into();
                         } else {
                             println!("No name for the output file found! Exiting");
                             return;
@@ -213,7 +215,7 @@ fn main() {
                 }
             }
 
-            if path.exists(){
+            if output_path.exists(){
                 let confirmation = Confirm::new()
                 .with_prompt("File already exists. Do you want to replace it?")
                 .interact().unwrap();
@@ -223,7 +225,7 @@ fn main() {
                 }
             }
             
-            let mut file = File::create(path).unwrap();
+            let mut file = File::create(output_path).unwrap();
             file.write(&decoded).unwrap();
         },
     }

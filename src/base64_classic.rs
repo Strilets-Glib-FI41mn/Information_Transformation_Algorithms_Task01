@@ -45,4 +45,19 @@ impl Alphabet for Base64Classic{
     fn comment_char(&self) -> char {
         '-'
     }
+    fn search_incorrect_input_symbols(&self, line: &str) -> Vec<(usize, char)> {
+        line.chars().enumerate()
+        .filter(|(_, ch)|{
+            match self.index_for_char(*ch){
+                Some(_) => {false},
+                None => {
+                    if *ch == self.padding_char(){
+                        return false;
+                    }
+                    true
+                },
+            }
+        })
+        .collect()
+    }
 }
