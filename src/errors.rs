@@ -14,7 +14,8 @@ pub enum DecodeError{
     IncorrectPadding{
         line: usize,
         position: usize
-    }
+    },
+    DataAfterLast
 }
 impl Display for DecodeError{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -27,6 +28,9 @@ impl Display for DecodeError{
             },
             DecodeError::IncorrectPadding { line, position } => {
                 write!(f, "Рядок {}: Некоректна використання паддінгу {}", line, position)
+            },
+            DecodeError::DataAfterLast  => {
+                write!(f, "Наявні дані після кінця повідомлення")
             },
         }
     }

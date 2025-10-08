@@ -12,12 +12,12 @@ pub fn decode_using_alphabet<T: Alphabet>(alphabet: T, data: &String) -> Result<
 
     let (text_u8, errors) = {
 
-        let mut commentless: Vec<_> = 
+        let commentless: Vec<_> = 
         data
             .lines()
             .enumerate()
-            .map(|(lines, text)|{
-                Ok((lines, text))
+            .map(|(line, text)|{
+                Ok((line, text))
             })
             .filter(|val|{
                 if let Ok((_, text)) = val{
@@ -28,32 +28,8 @@ pub fn decode_using_alphabet<T: Alphabet>(alphabet: T, data: &String) -> Result<
                 }
                 true
             }).collect();
-            let max_uncomment_line = commentless.len();
 
-            for line in 0..max_uncomment_line - 1{
-                if let Ok((_, text)) = commentless[line] && let lenth = text.len() && lenth != 76{
-                    commentless[line] = Err(DecodeError::IncorrectLength{
-                        line,
-                        lenth
-                    });
-                } else if let Ok((_, text)) = commentless[line] && let Some(position) = text.find(alphabet.padding_char()){
-                    commentless[line] = Err(DecodeError::IncorrectPadding{
-                        line: line,
-                        position
-                    });
-                }
-            }
-            let filtered = commentless.into_iter()
-            .map(|val|{
-                if let Ok((line, text)) = val && let Some(position) = text[1..].find(alphabet.comment_char()){
-                    return Err(DecodeError::IncorrectInputSymbol{
-                        line: line,
-                        position,
-                        symbol: alphabet.comment_char()
-                    })
-                }
-                val
-            })
+            let filtered: Vec<_> = commentless.into_iter()
             .map(|val|{
                 if let Ok((line, text)) = val && let v = alphabet.search_incorrect_input_symbols(text) && v.len() > 0{
                     return Err(DecodeError::IncorrectInputSymbol{
@@ -64,7 +40,72 @@ pub fn decode_using_alphabet<T: Alphabet>(alphabet: T, data: &String) -> Result<
                 }
                 val
             })
-            ;
+            .map(|val|{
+                match val{
+                    Ok((line, text)) => {
+                        let lenth = text.chars().count();
+                        if  lenth % 4 != 0 {
+                            return Err(DecodeError::IncorrectLength{
+                                line,
+                                lenth
+                            });
+                        }
+                        else{
+                            return Ok((line, text, lenth));
+                        }
+                    },
+                    Err(err) => Err(err),
+                }
+            })
+            .collect();
+            let (filtered, last_commentless) = 
+            {
+                let mut last_commentless = None;
+                let mut added_data_after_last = false;
+                let mut new_filtered = vec![];
+                for val in filtered{
+                    match val{
+                        Ok((line, text, lenth)) => {
+                            if last_commentless.is_some() && !added_data_after_last{
+                                new_filtered.push(Err(DecodeError::DataAfterLast));
+                                added_data_after_last = true;
+                                continue;
+                            }
+                            if last_commentless.is_none() && (text.ends_with(alphabet.padding_char()) 
+                            || text.ends_with(stringify!("{}{}",alphabet.padding_char(),alphabet.padding_char())) || lenth != 76) {
+                                last_commentless = Some(line);
+                                new_filtered.push(Ok((line, text)));
+                                continue;
+                            }
+                            new_filtered.push(Ok((line, text)));
+                        },
+                        Err(err) => new_filtered.push(Err(err.clone())),
+                    }
+                }
+                (new_filtered, last_commentless)
+            };
+
+            let filtered = filtered.into_iter()
+            .map(|val|{
+                if let Ok((line, text)) = val && let Some(position) = text[1..].find(alphabet.comment_char()){
+                    return Err(DecodeError::IncorrectInputSymbol{
+                        line: line,
+                        position,
+                        symbol: alphabet.comment_char()
+                    })
+                }
+                val
+            })
+            
+            .map(|val|{
+                if let Ok((line, text)) = val && Some(line) != last_commentless && let Some(position) = text.find(alphabet.padding_char()){
+                    return Err(DecodeError::IncorrectPadding{
+                        line: line,
+                        position
+                    })
+                }
+                val
+            });
             let (bytes, errors): (Vec<Result<_, _>>, Vec<Result<_, _>>) = 
             filtered
             .into_iter()
