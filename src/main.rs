@@ -3,27 +3,12 @@ mod alphabet;
 mod base64_classic;
 mod decoder;
 mod errors;
-
 use alphabet::Alphabet;
-//use clap::Error;
 use clap::Parser;
 use serde::Serialize;
 use std::{fs::File, io::Write, path::PathBuf};
 use dialoguer::Confirm;
 use dialoguer::Editor;
-
-
-
-/*
-#[derive(
-    clap::ValueEnum, Clone, Default, Serialize
-)]
-#[serde(rename_all = "kebab-case")]
-enum Encoding{
-    #[default]
-    BASE64,
-    RLE
-}*/
 
 
 #[derive(
