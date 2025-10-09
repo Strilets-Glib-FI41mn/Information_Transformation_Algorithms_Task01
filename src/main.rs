@@ -48,7 +48,9 @@ struct Cli {
     #[arg(long, action)]
     extension_comment: bool,
     #[arg(long, action)]
-    name_comment: bool
+    name_comment: bool,
+    #[arg(long, action)]
+    parent_comment: bool
 }
 
 
@@ -109,6 +111,7 @@ fn main() {
     let comment_char = classic_alphabet.comment_char();
     let extension_comment_preffix = format!("{} extension: ", comment_char);
     let name_comment_preffix = format!("{} name: ", comment_char);
+    let parent_comment_preffix = format!("{} parent: ", comment_char);
     match cli.mode{
         Mode::Encode => {
             match &cli.output_file{
@@ -150,6 +153,14 @@ fn main() {
                     file.write(comment.as_bytes()).unwrap();
                 }
             }
+            if cli.parent_comment && let Some(paretn) = cli.input_file.parent()
+            && let Some(parent_v) = paretn.to_str()
+            {
+                let comment =format!("\n{}{}", &parent_comment_preffix,  &parent_v.to_string());
+                if comment.len() <= 76{
+                    file.write(comment.as_bytes()).unwrap();
+                }
+            }
         },
         Mode::Decode => {
             match std::fs::exists(&cli.input_file){
@@ -177,6 +188,7 @@ fn main() {
                 },
                 None => {
                     let mut ext = None;
+                    let mut parent = None;
                     for comment in &comments {
                         if comment.contains(&name_comment_preffix) && let Some(file_name) = comment.split(&name_comment_preffix).nth(1){
                             output_path = file_name.into();
@@ -185,9 +197,25 @@ fn main() {
                         = comment.split(&extension_comment_preffix).nth(1){
                                 ext = Some(extension);
                         }
+                        if comment.contains(&parent_comment_preffix) && let Some(par) 
+                        = comment.split(&parent_comment_preffix).nth(1){
+                            parent = Some(par);
+                        }
+                        //parent_comment_preffix
                     }
                     if let Some(ext) = ext{
                         output_path.set_extension(ext);
+                    }
+                    if let Some(parent) = parent{
+                        let p = output_path.clone();
+                        let stem = p.file_stem().unwrap_or_default();
+                        match p.extension(){
+                            Some(ext) => {
+                                output_path = PathBuf::from(parent).join(stem);
+                                output_path.set_extension(ext);
+                            },
+                            None => output_path = PathBuf::from(parent).join(stem)
+                        }
                     }
                     let output_path_str = output_path.as_os_str().to_os_string().into_string().unwrap();
                     
